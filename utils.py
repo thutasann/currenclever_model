@@ -61,6 +61,7 @@ def save_predictions_to_db(email, month, year, predictions, category_order):
     conn = mysql.connector.connect(
         host="ballast.proxy.rlwy.net",
         user="root",
+        port="19572",
         password="WNgnXQcJDKLHIlOzyiZohpjfrcXKONae",
         database="railway"
     )
@@ -89,6 +90,7 @@ def estimate_budget_for_user(email, month=None, year=None):
     conn = mysql.connector.connect(
         host="ballast.proxy.rlwy.net",
         user="root",
+        port="19572",
         password="WNgnXQcJDKLHIlOLzyiZohpjfrcXKONae",
         database="railway"
     )

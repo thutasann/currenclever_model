@@ -87,88 +87,107 @@ def save_predictions_to_db(email, month, year, predictions, category_order):
 
 # ✅ Estimate Budget (with optional month/year + income)
 def estimate_budget_for_user(email, month=None, year=None):
-    conn = mysql.connector.connect(
-        host="ballast.proxy.rlwy.net",
-        user="root",
-        port="19572",
-        password="WNgnXQcJDKLHIlOLzyiZohpjfrcXKONae",
-        database="railway"
-    )
-    cursor = conn.cursor(dictionary=True)
-
-    # Fetch user expenses
-    cursor.execute("""
-        SELECT amount, category, date
-        FROM expenses
-        WHERE user_email = %s
-    """, (email,))
-    expenses = cursor.fetchall()
-
-    # Fetch user income
-    cursor.execute("""
-        SELECT amount, date
-        FROM income
-        WHERE user_email = %s
-    """, (email,))
-    incomes = cursor.fetchall()
-
-    conn.close()
-
-    if not expenses:
-        return [], []
-
-    df_exp = pd.DataFrame(expenses)
-    df_exp['date'] = pd.to_datetime(df_exp['date'])
-    df_exp['month'] = df_exp['date'].dt.to_period('M').astype(str)
-
-    df_inc = pd.DataFrame(incomes)
-    if not df_inc.empty:
-        df_inc['date'] = pd.to_datetime(df_inc['date'])
-        df_inc['month'] = df_inc['date'].dt.to_period('M').astype(str)
-        df_income = df_inc.groupby('month')['amount'].sum()
-    else:
-        df_income = pd.Series(dtype='float64')
-
-    df_grouped = df_exp.pivot_table(index='month', columns='category', values='amount', aggfunc='sum').fillna(0)
-    df_grouped = df_grouped.sort_index()
-
-    df_grouped['income'] = df_income
-    df_grouped['income'] = df_grouped['income'].fillna(method='ffill').fillna(0)
-
-    category_order = ["Food", "Groceries", "Fashion", "Leisures", "Accommodation", "Insurance", "Miscellaneous"]
-
-    selected_period = f"{year}-{str(month).zfill(2)}"
-    actual = df_grouped.loc[selected_period].reindex(category_order, fill_value=0).astype(float).tolist() if selected_period in df_grouped.index else [0.0 for _ in category_order]
-
-    # Only use data before selected month for prediction
-    past_df = df_grouped[df_grouped.index < selected_period]
-    predicted = []
-
     try:
-        if past_df.empty:
-            raise Exception("Not enough data to predict")
+        conn = mysql.connector.connect(
+            host="ballast.proxy.rlwy.net",
+            user="root",
+            port="19572",
+            password="WNgnXQcJDKLHIlOzyiZohpjfrcXKONae",
+            database="railway",
+            # connect_timeout=10,
+            # connection_pool_size=5
+        )
+        cursor = conn.cursor(dictionary=True)
 
-        X = np.arange(len(past_df)).reshape(-1, 1)
-        income_col = past_df['income'].values.reshape(-1, 1)
-        X_combined = np.hstack([X, income_col])
+        date_filter = f"{year}-{str(month).zfill(2)}-01"
+        
+        cursor.execute("""
+            SELECT amount, category, date
+            FROM expenses
+            WHERE user_email = %s 
+            AND date <= %s
+        """, (email, date_filter))
+        expenses = cursor.fetchall()
 
-        for category in category_order:
-            y = past_df.get(category, pd.Series([0] * len(past_df))).values
-            model = RandomForestRegressor(n_estimators=100, random_state=42)
-            model.fit(X_combined, y)
-            future_index = np.array([[len(past_df), df_grouped['income'].iloc[-1]]])
-            pred = model.predict(future_index)[0]
-            predicted.append(round(pred, 2))
+        cursor.execute("""
+            SELECT amount, date
+            FROM income
+            WHERE user_email = %s
+            AND date <= %s
+        """, (email, date_filter))
+        incomes = cursor.fetchall()
 
-        selected_date = pd.to_datetime(f"{year}-{str(month).zfill(2)}-01")
-        next_month_date = selected_date + pd.DateOffset(months=1)
-        next_month = next_month_date.month
-        next_year = next_month_date.year
+        cursor.close()
+        conn.close()
 
-        save_predictions_to_db(email, next_month, next_year, predicted, category_order)
+        if not expenses:
+            return [], []
 
+        df_exp = pd.DataFrame(expenses)
+        df_exp['date'] = pd.to_datetime(df_exp['date'])
+        df_exp['month'] = df_exp['date'].dt.to_period('M').astype(str)
+
+        df_inc = pd.DataFrame(incomes)
+        if not df_inc.empty:
+            df_inc['date'] = pd.to_datetime(df_inc['date'])
+            df_inc['month'] = df_inc['date'].dt.to_period('M').astype(str)
+            df_income = df_inc.groupby('month')['amount'].sum()
+        else:
+            df_income = pd.Series(dtype='float64')
+
+        df_grouped = df_exp.pivot_table(index='month', columns='category', values='amount', aggfunc='sum').fillna(0)
+        df_grouped = df_grouped.sort_index()
+
+        df_grouped['income'] = df_income
+        df_grouped['income'] = df_grouped['income'].fillna(method='ffill').fillna(0)
+
+        category_order = ["Food", "Groceries", "Fashion", "Leisures", "Accommodation", "Insurance", "Miscellaneous"]
+
+        selected_period = f"{year}-{str(month).zfill(2)}"
+        actual = df_grouped.loc[selected_period].reindex(category_order, fill_value=0).astype(float).tolist() if selected_period in df_grouped.index else [0.0 for _ in category_order]
+
+        past_df = df_grouped[df_grouped.index < selected_period]
+        predicted = []
+
+        try:
+            if past_df.empty:
+                raise Exception("Not enough data to predict")
+
+            chunk_size = 1000
+            predicted = []
+            
+            for i in range(0, len(category_order), chunk_size):
+                categories_chunk = category_order[i:i + chunk_size]
+                
+                X = np.arange(len(past_df)).reshape(-1, 1)
+                income_col = past_df['income'].values.reshape(-1, 1)
+                X_combined = np.hstack([X, income_col])
+
+                for category in categories_chunk:
+                    y = past_df.get(category, pd.Series([0] * len(past_df))).values
+                    model = RandomForestRegressor(n_estimators=100, random_state=42)
+                    model.fit(X_combined, y)
+                    future_index = np.array([[len(past_df), df_grouped['income'].iloc[-1]]])
+                    pred = model.predict(future_index)[0]
+                    predicted.append(round(pred, 2))
+
+            selected_date = pd.to_datetime(f"{year}-{str(month).zfill(2)}-01")
+            next_month_date = selected_date + pd.DateOffset(months=1)
+            next_month = next_month_date.month
+            next_year = next_month_date.year
+
+            save_predictions_to_db(email, next_month, next_year, predicted, category_order)
+
+            return actual, predicted
+
+        except Exception as e:
+            print("⚠️ Prediction error:", e)
+            predicted = [0.0 for _ in category_order]
+            return actual, predicted
+
+    except mysql.connector.Error as db_err:
+        print(f"Database error: {str(db_err)}")
+        return [], []
     except Exception as e:
-        print("⚠️ Prediction error:", e)
-        predicted = [0.0 for _ in category_order]
-
-    return actual, predicted
+        print(f"General error: {str(e)}")
+        return [], []

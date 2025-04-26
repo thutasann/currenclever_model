@@ -42,4 +42,7 @@ conda activate tf
 # Install TensorFlow and other packages
 conda install tensorflow
 pip3 install scikit-learn pandas numpy statsmodels mysql-connector-python flask flask-cors
+
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+python3 app.py
 ```

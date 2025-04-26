@@ -2,20 +2,22 @@ from flask import Flask, request, jsonify, make_response  # type: ignore
 from flask_cors import CORS  # ✅ removed cross_origin
 from utils import load_model_and_predict, estimate_budget_for_user
 import os
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="resource_tracker")
 
 app = Flask(__name__)
 
-# ✅ Enable CORS for all routes from your Vite frontend
+# ✅ Enable CORS for all routes with '*' origin
 CORS(app, resources={r"/*": {
-    "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+    "origins": "*",
     "methods": ["GET", "POST", "OPTIONS"],
-    "allow_headers": ["Content-Type"]
+    "allow_headers": ["Content-Type", "Authorization"]
 }})
 
 # ✅ Optional fallback to ensure headers always included
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+    response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
     response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
     return response
@@ -63,13 +65,18 @@ def budget_estimation():
         return jsonify({"error": "Email parameter is required."}), 400
 
     try:
-        actual, estimated = estimate_budget_for_user(email, month, year)
+        # Suppress statsmodels warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            actual, estimated = estimate_budget_for_user(email, month, year)
+            
         print("🔍 EMAIL:", email)
         print("✅ Actual:", actual)
         print("📈 Estimated:", estimated)
 
         return jsonify({"actual": actual, "estimated": estimated})
     except Exception as e:
+        print("⚠️ Budget estimation error:", str(e))
         return jsonify({"error": str(e)}), 500
 
 @app.route('/test')

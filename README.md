@@ -20,3 +20,7 @@ pip3 install flask flask-cors scikit-learn pandas numpy mysql-connector-python s
 ```bash
 pip3 install tensorflow-macos tensorflow-metal
 ```
+
+```bash
+git config --global http.postBuffer 524288000
+```

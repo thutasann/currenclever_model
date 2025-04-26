@@ -59,10 +59,10 @@ def load_model_and_predict(currency, start_date=None, end_date=None, window_size
 # ✅ Save prediction to MySQL
 def save_predictions_to_db(email, month, year, predictions, category_order):
     conn = mysql.connector.connect(
-        host="localhost",
+        host="ballast.proxy.rlwy.net",
         user="root",
-        password="",
-        database="currenclever"
+        password="WNgnXQcJDKLHIlOzyiZohpjfrcXKONae",
+        database="railway"
     )
     cursor = conn.cursor()
 

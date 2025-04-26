@@ -87,10 +87,10 @@ def save_predictions_to_db(email, month, year, predictions, category_order):
 # ✅ Estimate Budget (with optional month/year + income)
 def estimate_budget_for_user(email, month=None, year=None):
     conn = mysql.connector.connect(
-        host="localhost",
+        host="ballast.proxy.rlwy.net",
         user="root",
-        password="",
-        database="currenclever"
+        password="WNgnXQcJDKLHIlOLzyiZohpjfrcXKONae",
+        database="railway"
     )
     cursor = conn.cursor(dictionary=True)
 
